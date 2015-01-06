@@ -1,0 +1,82 @@
+---
+title: "Clustering"
+author: "wz2270 Wenxuan Zhang"
+date: "January 5, 2015"
+output: html_document
+---
+
+```{r}
+wine<-read.csv("wine.csv")
+colnames(wine)<-c(
+     "Cultivar",
+     "Alcohol","Malic acid",
+ 	"Ash",
+	"Alcalinity of ash",  
+ 	"Magnesium",
+	"Total phenols",
+ 	"Flavanoids",
+ 	"Nonflavanoid phenols",
+ 	"Proanthocyanins",
+	"Color intensity",
+ 	"Hue",
+ 	"OD280/OD315 of diluted wines",
+ 	"Proline")
+wineTrain<-wine[,which(names(wine)!="Cultivar")]
+#remove the item with correlation
+set.seed(36563)
+wineK3<-kmeans(x=wineTrain,centers=3)
+wineK3
+#install.packages("useful")
+library(useful)
+plot(wineK3,data=wineTrain)
+plot(wineK3,data=wine,class="Cultivar")
+set.seed(36563)
+wineK3N25<-kmeans(wineTrain,centers=3,nstart=25)
+wineK3$size
+wineK3N25$size
+```
+Selecting number of clusters are of vital importance to success of clustering.
+Choose number by Hartigan Rule.
+compare within cluster sum of square with k and that of k+1 clusters.
+FitKmeans can help you doing that
+```{r}
+wineBest<-FitKMeans(wineTrain,max.clusters=20,nstart=25,seed=278613)
+PlotHartigan(wineBest)
+table(wine$Cultivar,wineK3N25$cluster)
+plot(table(wine$Cultivar,wineK3N25$cluster),main="Confusion Matrix for Wine Clustering",xlab="Cultivar",ylab="Cluster")
+```
+Another idea of selecting clusters is Gap statistic,which compares the within-cluster dissimilarity for a clustering of data with that of bootstraped sample of data.
+```{r}
+#install.packages("cluster")
+library(cluster)
+theGap<-clusGap(wineTrain,FUNcluster=pam,K.max=20)
+gapDF<-as.data.frame(theGap$Tab)
+gapDF
+#logW curve
+ggplot(gapDF,aes(x=1:nrow(gapDF)))+geom_line(aes(y=logW),color="blue")+geom_point(aes(y=logW),color="blue")+geom_line(aes(y=E.logW),color="green")+geom_point(aes(y=E.logW),color="green")+labs(x="Number of Clusters")
+#gap curve
+ggplot(gapDF,aes(x=1:nrow(gapDF)))+geom_line(aes(y=gap),color="red")+geom_point(aes(y=gap),color="red")+geom_errorbar(aes(ymin=gap-SE.sim,ymax=gap+SE.sim),color="red")+labs(x="Number of Clusters",y="Gap")
+```
+Kmean does not work with categlorical data and not robust. Thus there are K-medoids, which use real data point ,say median as center.
+```{r}
+indicators<-c("BX.KLT.DINV.WD.GD.ZS","NY.GDP.DEFL.KD.ZG","NY.GDP.MKTP.CD","NY.GDP.MKTP.KD.ZG","NY.GDP.PCAP.CD","NY.GDP.PCAP.KD.ZG","TG.VAL.TOTL.GD.ZS")
+#install.packages("WDI")
+library(WDI)
+wbInfo<-WDI(country="all",indicator=indicators,start=2011,end=2011,extra=TRUE)
+#get rid of aggregated info
+wbInfo<-wbInfo[wbInfo$region!="Aggregates",]
+#get rid of countries where all indicators are NA
+wbInfo<-wbInfo[which(rowSums(!is.na(wbInfo[,indicators]))>0),]
+#get rid of rows where the iso is missing
+wbInfo<-wbInfo[!is.na(wbInfo$iso2c),]
+rownames(wbInfo)<-wbInfo$iso2c
+wbInfo$region<-factor(wbInfo$region)
+wbInfo$income<-factor(wbInfo$income)
+wbInfo$lending<-factor(wbInfo$lending)
+keep.cols<-which(!names(wbInfo) %in% c("iso2c","country","year","capital","iso3c"))
+wbPam<-pam(x=wbInfo[,keep.cols],k=12,keep.diss=TRUE,keep.data=TRUE)
+#show the medoids observation
+wbPam$medoids
+#make a silhouette plot
+plot(wbPam,which.plots=2,main="")
+```
