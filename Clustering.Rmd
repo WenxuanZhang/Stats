@@ -80,3 +80,85 @@ wbPam$medoids
 #make a silhouette plot
 plot(wbPam,which.plots=2,main="")
 ```
+Programming download files.
+```{r}
+#This file did not work. try to download from the following source.
+download.file(url="http://www.naturalearthdata.com/http//www.naturalearthdata.com/download/10m/cultural/ne_10m_admin_0_sovereignty.zip",destfile="/Users/leilei/Clustering/ne_10m_admin_0_sovereignty.zip",method="curl")
+unzip(zipfile="/Users/leilei/Clustering/ne_10m_admin_0_sovereignty.zip",exdir="/Users/leilei/Clustering/maps")
+#install.packages("maptools")
+library(maptools)
+world<-readShapeSpatial("/Users/leilei/Clustering/world/world_borders.shp")
+head(world@data)
+world@data[which(world@data$CNTRY_NAME=="Austria"),]
+#The name method of this map is different from world bank data 
+library(plyr)
+world@data$FIPS_CNTRY<-as.character(revalue(world@data$FIPS_CNTRY,replace=c(AS="AU",VM="VN",BM="MM",SP="ES",PO="PT",IC="IL",SF="ZA",TU="TR",IZ="IQ",UK="GB",EI="IE",SU="SD",MA="MG",MO="MA",JA="JP",SW="SE",SN="SG")))
+library(ggplot2)
+#install.packages("rgeos")
+world@data$id<-rownames(world@data)
+gpclibPermitStatus()
+gpclibPermit()
+gpclibPermitStatus()
+#install.packages("gpclib")
+library(gpclib)
+world.df<-fortify(world,region="id")
+#Method to convert a generic R object into a data frame useful for plotting. Takes its name from the idea of fortifying the original data with model fit statistics, and vice versa.
+#
+head(world.df)
+world.df<-join(world.df,world@data[,c("id","CNTRY_NAME","FIPS_CNTRY")],by="id")
+#just like join in sql, while join here is left join by default
+head(world.df)
+clusterMembership<-data.frame(FIPS_CNTRY=names(wbPam$clustering),Cluster=wbPam$clustering,stringsAsFactors=FALSE)
+head(clusterMembership)
+world.df=join(world.df,clusterMembership,by="FIPS_CNTRY")
+world.df$Cluster<-as.character(world.df$Cluster)
+world.df$Cluster<-factor(world.df$Cluster,levels=1:12)
+ggplot()+geom_polygon(data=world.df,aes(x=long,y=lat,group=group,fill=Cluster,color=Cluster))+
+    labs(x=NULL,y=NULL)+coord_equal()+theme(panel.grid.major=element_blank(),panel.grid.minor=element_blank(),axis.text.x=element_blank(),axis.text.y=element_blank(),axis.ticks=element_blank(),panel.background=element_blank())
+
+#element_blank()
+#Theme element: blank. This theme element draws nothing, and assigns no space
+ggplot()+geom_polygon(data=world.df,aes(x=long,y=lat,group=group,fill=Cluster,color=Cluster))+
+    labs(x=NULL,y=NULL)+coord_equal()
+```
+Determine number of clusters by cluster infromation
+```{r}
+wbPam$clusinfo
+```
+Hierarchical Clustering
+```{r}
+wineH<-hclust(d=dist(wineTrain))
+plot(wineH)
+#hierachical clustering for categlorical data
+keep.cols<-which(!names(wbInfo)%in%c("iso2c","country","year","capital","iso3c"))
+wbDaisy<-daisy(x=wbInfo[,keep.cols])
+#compute all pair wise dissimilarityes between obseravtions in data set.
+#daisy(x, metric = c("euclidean", "manhattan", "gower"),
+ #     stand = FALSE, type = list(), weights = rep.int(1, p))
+#if mixed(categlorical and numerical), use gower
+#“Gower's distance” is chosen by metric "gower" or automatically if some columns of x are not numeric. Also known as Gower's coefficient (1971), expressed as a dissimilarity, this implies that a particular standardisation will be applied to each variable, and the “distance” between two units is the sum of all the variable-specific distances, see the details section.
+wbH<-hclust(wbDaisy)
+plot(wbH)
+wineH1<-hclust(dist(wineTrain),method="single")
+wineH2<-hclust(dist(wineTrain),method="complete")
+wineH3<-hclust(dist(wineTrain),method="average")
+wineH4<-hclust(dist(wineTrain),method="centroid")
+plot(wineH1,labels=FALSE,main="Single")
+plot(wineH2,labels=FALSE,main="Complete")
+plot(wineH3,labels=FALSE,main="Average")
+plot(wineH4,labels=FALSE,main="Centroid")
+
+#either set number of clusters or where to cut
+plot(wineH)
+rect.hclust(wineH,k=3,border="red")
+rect.hclust(wineH,k=13,border="blue")
+plot(wineH)
+rect.hclust(wineH,h=200,border="red")
+rect.hclust(wineH,h=800,border="blue")
+#fastcluster might be a good option
+```
+
+
+
+
+
