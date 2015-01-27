@@ -5,6 +5,157 @@ date: "January 16, 2015"
 output: html_document
 ---
 
+Most of these code are came from R for Everyone Jared P. Lander.
 ```{r}
+require(WDI)
+gdp<-WDI(country=c("US","CA","GB","DE","CN","JP","SG","IL"),indicator=c("NY.GDP.PCAP.CD","NY.GDP.MKTP.CD"),start=1960,end=2011)
+names(gdp)<-c("iso2c","Country","Year","PerCapGDP","GDP")
+require(ggplot2)
+require(scales)
+ggplot(gdp,aes(Year,PerCapGDP,color=Country,linetype=Country))+geom_line()+scale_y_continuous(label=dollar)
+require(useful)
+ggplot(gdp,aes(Year,GDP,color=Country,linetype=Country))+geom_line()+scale_y_continuous(label=multiple_format(extra=dollar,multiple="M"))
+us<-gdp$PerCapGDP[gdp$Country=="United States"]
+#convert us into timeseries
+us<-ts(us,start=min(gdp$Year),end=max(gdp$Year))
+plot(us,ylab="Per Capita GDP",xlab="Year")
+```
+
+ACF, aslo named autocorelation function,for a sequence x1,x2,x3,...xn. the zero order ACF is variance while the k order variance is caculate in the following way:$\sum_{i=1}^{i=n-k}{(x_{i+k}-\bar{x})}{(x_i-\bar{x})}/(n-1)$, k order correlation = k order variance/0 order variance.
+
+Example
+```{r}
+a=c(1:10)
+a=ts(a,start=1990,end=1999)
+p<-acf(a)
+p
+secondordervar<-sum((a[c(1:9)]-mean(a))*(a[2:10]-mean(a)))/9
+corr2<-secondordervar/var(a)
+```
+
+?PACF of order 2 , the effect that is not explained by the first lag.
+
+```{r}
+acf(us)
+pacf(us)
+x<-c(1,4,8,2,6,6,5,3)
+diff(x,differences=1)
+diff(x,differences=2)
+diff(x,lag=1)
+diff(x,lag=2)
+```
+Here are some difference between difference option and lag. Doing difference means:$x_{i+1}-x_i$
+while lag=2 means:$x_{i+2}-x_i$
+
+How to decide the optimal number difference?
+```{r}
+require(forecast)
+ndiffs(x=us)
+plot(diff(us,2))
+usBest<-auto.arima(x=us)
+acf(usBest$residuals)
+pacf(usBest$residuals)
+coef(usBest)
+predict(usBest,n.ahead=5,se.fit=TRUE)
+theForecast<-forecast(object=usBest,h=5)
+plot(theForecast)
+```
+？Theory of arima
+
+Multvariate Time Series
+```{r}
+require(reshape2)
+gdpCast<-dcast(Year~Country,data=gdp[,c("Country","Year","PerCapGDP")],value.var="PerCapGDP")
+head(gdpCast)
+gdpTS<-ts(data=gdpCast[,-1],start=min(gdpCast$Year),end=max(gdpCast$Year))
+#build a plot and legend using base graphics
+plot(gdpTS,plot.type="single",col=1:8)
+legend("topleft",legend=colnames(gdpTS),ncol=2,lty=1,col=1:8,cex=.4)
+gdpTS<-gdpTS[,which(colnames(gdpTS)!="Germany")]
+
+```
+The most common way of fittig a modelto multiple time seriess is to use a vector auotregerssive model. The equation for a VAR is
+$X_t=\phi_1X_{t-1}+...+\phi_pX_{t-p}+Z_t$
+${Z_t~WN(0,\sum)}$ is white noise.
+
+```{r}
+numDiffs<-ndiffs(gdpTS)
+gdpDiffed<-diff(gdpTS,differences=numDiffs)
+plot(gdpDiffed,plot.type="single",col=1:7)
+legend("bottomleft",legend=colnames(gdpDiffed),ncol=2,lty=1,col=1:7,cex=0.4)
+#vars
+#install.packages("vars")
+require(vars)
+gdpVar<-VAR(gdpDiffed,lag.max=12)
+#how to define this lag.max
+gdpVar$p
+names(gdpVar$varresult)
+class(gdpVar$varresult$Canada)
+class(gdpVar$varresult$Japan)
+head(coef(gdpVar$varresult$Canada))
+head(coef(gdpVar$varresult$Japan))
+#install.packages("coefplot")
+require(coefplot)
+coefplot(gdpVar$varresult$Canada)
+coefplot(gdpVar$varresult$Japan)
+predict(gdpVar,n.ahead=5)
+```
+
+GARCH
+Generalized autoregressive conditional heteroskedasticity or GARCH family of models.
+The model for variance in GARCH(m,s)
+
+$/epsilon_t=/sigma_t*e_t$
+where 
+$/sigma_t^2=a_0+a_1/epsilon_{t-1}^2+...a_m\epsilon_{t-m}^2+\beta_1\sigma_{t-1}^2+...\beta_1\sigma_{t-1}^2+...\beta_s\sigma_{t-s}^2$
+and
+$e~GWN(0,1)$
+
+```{r}
+#install.packages("quantmod")
+require(quantmod)
+att<-getSymbols("T",auto.assign=FALSE)
+require(xts)
+head(att)
+plot(att)
+chartSeries(att)
+addBBands()
+addMACD(32,50,12)
+attClose<-att$T.Close
+class(attClose)
+head(attClose)
+install.packages("rugarch")
+require(rugarch)
+attSpec<-ugarchspec(variance.model=list(model="sGARCH",garchOrder=c(1,1)),mean.model=list(armaOrder=c(1,1)),distribution.model="std")
+attGarch<-ugarchfit(spec=attSpec,data=attClose)
+plot(attGarch@fit$residuals,type='l')
+plot(attGarch,which=10)
+#ARMA
+attSpec1<-ugarchspec(variance.model=list(model="sGARCH",garchOrder=c(1,1)),mean.model=list(armaOrder=c(1,1)),distribution.model="std")
+#ARMA(0.0)
+attSpec2<-ugarchspec(variance.model=list(model="sGARCH",garchOrder=c(1,1)),mean.model=list(armaOrder=c(0,0)),distribution.model="std")
+#ARMA(0,2)
+attSpec3<-ugarchspec(variance.model=list(model="sGARCH",garchOrder=c(1,1)),mean.model=list(armaOrder=c(0,2)),distribution.model="std")
+#ARMA(1,2)
+attSpec4<-ugarchspec(variance.model=list(model="sGARCH",garchOrder=c(1,1)),mean.model=list(armaOrder=c(1,2)),distribution.model="std")
+
+attGarch1<-ugarchfit(spec=attSpec1,data=attClose)
+attGarch2<-ugarchfit(spec=attSpec2,data=attClose)
+attGarch3<-ugarchfit(spec=attSpec3,data=attClose)
+attGarch4<-ugarchfit(spec=attSpec4,data=attClose)
+
+infocriteria(attGarch1)
+infocriteria(attGarch2)
+infocriteria(attGarch3)
+infocriteria(attGarch4)
+
+attPred<-ugarchboot(attGarch,n.ahead=50,method=c("Partical","Full")[1])
+#plot(attPred,which=2)
+
+attLog<-diff(log(attClose))[-1]
+attLogSpec<-ugarchspec(variance.model=list(model="sGARCH",garchOrder=c(1,1)),mean.model=list(armaOrder=c(1,1)),distribution.model="std")
+#fit it
+attLogGarch<-ugarchfit(spec=attLogSpec,data=attLog)
+infocriteria(attLogGarch)
 
 ```
