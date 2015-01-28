@@ -1,0 +1,31 @@
+Generalized Linear Models
+
+
+```{r}
+acs<-read.table("http://jaredlander.com/data/acs_ny.csv",sep=",",header=TRUE,stringsAsFactors=FALSE)
+acs$Income<-with(acs,FamilyIncome>=150000)
+require(ggplot2)
+require(useful)
+ggplot(acs,aes(x=FamilyIncome))+geom_density(fill="grey",color="grey")+geom_vline(xintercept=150000)+scale_x_continuous(limits=c(0,1000000))
+income1<-glm(Income~HouseCosts+NumWorkers+OwnRent+NumBedrooms+FamilyType,data=acs,family=binomial(link="logit"))
+summary(income1)
+require(coefplot)
+coefplot(income1)
+invlogit<-function(x)
+{
+    1/(1+exp(-x))
+}
+invlogit(income1$coefficients)
+ggplot(acs,aes(x=NumChildren))+geom_histogram(binwidth=1)
+children1<-glm(NumChildren~FamilyIncome+FamilyType+OwnRent,data=acs,family=poisson(link="log"))
+summary(children1)
+coefplot(children1)
+z<-(acs$NumChildren-children1$fitted.values)/sqrt(children1$fitted.values)
+sum(z^2)/children1$df.residual
+pchisq(sum(z^2),children1$df.residual)
+#overdispersion and remedy
+children2<-glm(NumChildren~FamilyIncome+FamilyType+OwnRent,data=acs,family=quasipoisson(link="log"))
+multiplot(children1,children2)
+
+
+```
